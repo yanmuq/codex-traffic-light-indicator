@@ -1,0 +1,86 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event SessionStart",
+            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event SessionStart",
+            "timeout": 5,
+            "statusMessage": "Update traffic light indicator"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event UserPromptSubmit",
+            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event UserPromptSubmit",
+            "timeout": 5,
+            "statusMessage": "Update traffic light indicator"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PreToolUse",
+            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PreToolUse",
+            "timeout": 5,
+            "statusMessage": "Update traffic light indicator"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PostToolUse",
+            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PostToolUse",
+            "timeout": 5,
+            "statusMessage": "Update traffic light indicator"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PermissionRequest",
+            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PermissionRequest",
+            "timeout": 5,
+            "statusMessage": "Update traffic light indicator"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event Stop",
+            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event Stop",
+            "timeout": 5,
+            "statusMessage": "Update traffic light indicator"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+runtime/
+backups/
+*.pyc
+__pycache__/
+.pytest_cache/
+*.log
+*.png
