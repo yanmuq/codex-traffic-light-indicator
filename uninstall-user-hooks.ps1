@@ -39,7 +39,7 @@ if (-not (Test-Path -LiteralPath $BackupDir)) {
   }
 }
 
-$Raw = Get-Content -LiteralPath $HooksPath -Raw
+$Raw = Get-Content -LiteralPath $HooksPath -Raw -Encoding UTF8
 $Config = $Raw | ConvertFrom-Json
 
 if (-not $Config.hooks) {
@@ -66,8 +66,9 @@ if ($DryRun) {
   exit 0
 }
 
-$Raw | Set-Content -LiteralPath $BackupPath -Encoding UTF8
-$OutputJson | Set-Content -LiteralPath $HooksPath -Encoding UTF8
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($BackupPath, $Raw, $Utf8NoBom)
+[System.IO.File]::WriteAllText($HooksPath, $OutputJson, $Utf8NoBom)
 
 Write-Host "Removed traffic-light hooks."
 Write-Host "Hooks file: $HooksPath"

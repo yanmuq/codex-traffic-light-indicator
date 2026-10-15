@@ -85,14 +85,18 @@ class CodexRolloutStatus:
         self.sessions_root = sessions_root
         self.files: dict[Path, RolloutFileState] = {}
         self.watched_paths: list[Path] = []
+        self.session_ids: frozenset[str] = frozenset()
         self.last_scan_ts = 0.0
         self.last_error: str | None = None
         self.last_snapshot: dict[str, Any] = self.snapshot("red", "rollout:init")
 
-    def refresh(self) -> dict[str, Any]:
+    def refresh(self, session_ids: list[str] | None = None) -> dict[str, Any]:
         current = time.time()
         self.last_error = None
-        if current - self.last_scan_ts >= FILE_SCAN_INTERVAL_SECONDS:
+        next_session_ids = frozenset(session_ids or ())
+        sessions_changed = next_session_ids != self.session_ids
+        self.session_ids = next_session_ids
+        if sessions_changed or current - self.last_scan_ts >= FILE_SCAN_INTERVAL_SECONDS:
             self._rescan_files(current)
         for path in list(self.watched_paths):
             self._read_new_lines(path)
@@ -107,12 +111,19 @@ class CodexRolloutStatus:
             return
         cutoff = current - RECENT_FILE_WINDOW_SECONDS
         candidates: list[tuple[float, Path]] = []
+        session_paths: set[Path] = set()
+        session_suffixes = tuple(f"-{session_id}.jsonl" for session_id in self.session_ids)
         try:
             for path in self.sessions_root.rglob("rollout-*.jsonl"):
                 try:
                     mtime = path.stat().st_mtime
                 except OSError:
                     continue
+                # An open Windows rollout can keep an old modification time
+                # while Codex appends new events. Hooks identify which files
+                # to watch; their contents still decide activity/completion.
+                if session_suffixes and path.name.endswith(session_suffixes):
+                    session_paths.add(path)
                 if mtime >= cutoff:
                     candidates.append((mtime, path))
         except OSError as exc:
@@ -121,6 +132,7 @@ class CodexRolloutStatus:
             return
         candidates.sort(reverse=True)
         self.watched_paths = [path for _, path in candidates[:MAX_WATCHED_FILES]]
+        self.watched_paths.extend(sorted(session_paths - set(self.watched_paths)))
         watched = set(self.watched_paths)
         for old_path in list(self.files):
             if old_path not in watched:

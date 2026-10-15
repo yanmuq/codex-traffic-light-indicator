@@ -10,6 +10,24 @@ import tempfile
 import time
 import datetime as dt
 from pathlib import Path
+
+# Keep Tcl/Tk discovery deterministic for the portable runtime used on this
+# machine. These variables must exist before Tk creates its first interpreter.
+if os.name == "nt":
+    _local_python_runtime = Path(__file__).resolve().parent / "python-runtime-release"
+    _system_python_runtime = Path("C:/Python313")
+    _tcl_library = os.environ.get("CODEX_TRAFFIC_LIGHT_TCL_LIBRARY")
+    _tk_library = os.environ.get("CODEX_TRAFFIC_LIGHT_TK_LIBRARY")
+    if not _tcl_library and (_system_python_runtime / "tcl" / "tcl8.6").is_dir():
+        _tcl_library = str(_system_python_runtime / "tcl" / "tcl8.6")
+        _tk_library = str(_system_python_runtime / "tcl" / "tk8.6")
+    _tcl_library = _tcl_library or str(_local_python_runtime / "tcl" / "tcl8.6")
+    _tk_library = _tk_library or str(_local_python_runtime / "tcl" / "tk8.6")
+    if Path(_tcl_library).is_dir():
+        os.environ.setdefault("TCL_LIBRARY", _tcl_library)
+    if Path(_tk_library).is_dir():
+        os.environ.setdefault("TK_LIBRARY", _tk_library)
+
 import tkinter as tk
 from tkinter import messagebox
 
@@ -42,6 +60,7 @@ WINDOW_SNAPSHOT_INTERVAL_SECONDS = 3
 LOG_MAX_BYTES = 25 * 1024 * 1024
 TRANSPARENT = "#020203"
 BASE_DPI = 96.0
+TOPMOST_REFRESH_MS = 1000
 
 DISPLAY_STATUS = {
     "red": "green",
@@ -68,6 +87,44 @@ def enable_windows_dpi_awareness() -> None:
         # the small 72x106 source image after the fact.
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except (AttributeError, OSError):
+        pass
+
+
+def enforce_windows_topmost(window_id: int) -> None:
+    """Move the Tk top-level wrapper to the front without taking focus."""
+    if os.name != "nt":
+        return
+    try:
+        user32 = ctypes.windll.user32
+        get_ancestor = user32.GetAncestor
+        get_ancestor.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+        get_ancestor.restype = ctypes.c_void_p
+        set_window_pos = user32.SetWindowPos
+        set_window_pos.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint,
+        ]
+        set_window_pos.restype = ctypes.c_int
+
+        # Tk exposes a child HWND through winfo_id(); GA_ROOT resolves the real
+        # top-level wrapper that participates in the desktop Z order.
+        hwnd = get_ancestor(ctypes.c_void_p(window_id), 2) or window_id
+        flags = 0x0001 | 0x0002 | 0x0010  # NOSIZE | NOMOVE | NOACTIVATE
+        set_window_pos(
+            ctypes.c_void_p(hwnd),
+            ctypes.c_void_p(-1),  # HWND_TOPMOST
+            0,
+            0,
+            0,
+            0,
+            flags,
+        )
+    except (AttributeError, OSError, TypeError, ValueError):
         pass
 
 
@@ -129,7 +186,9 @@ class TrafficLightIndicator:
 
         self.canvas.bind("<ButtonPress-1>", self.start_drag)
         self.canvas.bind("<B1-Motion>", self.drag)
+        self.canvas.bind("<ButtonRelease-1>", self.finish_drag)
         self.canvas.bind("<Button-3>", self.show_menu)
+        self.root.bind("<Map>", lambda _event: self.ensure_topmost(), add="+")
         self.root.bind("<Escape>", lambda _event: self.root.destroy())
 
         self.menu = tk.Menu(self.root, tearoff=False)
@@ -140,6 +199,7 @@ class TrafficLightIndicator:
         self.ensure_initial_state()
         self.log_indicator_start()
         self.refresh()
+        self.root.after_idle(self.maintain_topmost)
 
     def ensure_initial_state(self) -> None:
         RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
@@ -170,8 +230,33 @@ class TrafficLightIndicator:
         dx, dy = self.drag_start
         self.root.geometry(f"+{event.x_root - dx}+{event.y_root - dy}")
 
+    def finish_drag(self, _event: tk.Event) -> None:
+        self.drag_start = None
+        self.ensure_topmost()
+
     def show_menu(self, event: tk.Event) -> None:
-        self.menu.tk_popup(event.x_root, event.y_root)
+        try:
+            self.menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            try:
+                self.menu.grab_release()
+            except tk.TclError:
+                pass
+            self.ensure_topmost()
+
+    def ensure_topmost(self) -> None:
+        try:
+            self.root.attributes("-topmost", True)
+            enforce_windows_topmost(self.root.winfo_id())
+        except tk.TclError:
+            pass
+
+    def maintain_topmost(self) -> None:
+        self.ensure_topmost()
+        try:
+            self.root.after(TOPMOST_REFRESH_MS, self.maintain_topmost)
+        except tk.TclError:
+            pass
 
     def open_runtime_folder(self) -> None:
         import os
@@ -354,6 +439,7 @@ class TrafficLightIndicator:
             status = data.get("status", "red")
             if status in {"red", "yellow", "green"}:
                 updated_at = data.get("updated_at")
+                sessions = data.get("sessions", {})
                 self.last_hook_snapshot = {
                     "status": status,
                     "source": "hook",
@@ -361,6 +447,15 @@ class TrafficLightIndicator:
                     "updated_at": updated_at,
                     "age_seconds": self.age_seconds(updated_at),
                     "session_count": data.get("session_count", 0),
+                    "session_ids": (
+                        [
+                            session_id
+                            for session_id, session in sessions.items()
+                            if isinstance(session, dict)
+                            and session.get("status") in {"running", "waiting"}
+                        ]
+                        if isinstance(sessions, dict) else []
+                    ),
                 }
                 return self.last_hook_snapshot
         except Exception:
@@ -369,7 +464,9 @@ class TrafficLightIndicator:
 
     def read_status_snapshot(self) -> dict[str, object]:
         hook_snapshot = self.read_hook_snapshot()
-        rollout_snapshot = self.rollout_status.refresh()
+        rollout_snapshot = self.rollout_status.refresh(
+            session_ids=hook_snapshot.get("session_ids", [])
+        )
         self.latest_hook_snapshot = hook_snapshot
         self.latest_rollout_snapshot = rollout_snapshot
         chosen = self.choose_status(hook_snapshot, rollout_snapshot)

@@ -92,7 +92,14 @@ class FileLock:
 
 
 def read_stdin_json() -> dict[str, Any]:
-    raw = sys.stdin.read()
+    # Codex sends hook payloads through a pipe. On Windows, reading the text
+    # stream directly can apply the active console code page instead of UTF-8.
+    # Read bytes first so Chinese paths/session labels survive unchanged.
+    stdin_buffer = getattr(sys.stdin, "buffer", None)
+    if stdin_buffer is not None:
+        raw = stdin_buffer.read().decode("utf-8", errors="replace")
+    else:
+        raw = sys.stdin.read()
     if not raw.strip():
         return {}
     try:
@@ -225,6 +232,10 @@ def update_state(event: str, payload: dict[str, Any], explicit_session: str | No
 
 
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
     parser = argparse.ArgumentParser(description="Update the Codex traffic-light indicator state.")
     parser.add_argument("--event", required=True, help="Codex hook event name.")
     parser.add_argument("--session", help="Override session id, useful for manual tests.")

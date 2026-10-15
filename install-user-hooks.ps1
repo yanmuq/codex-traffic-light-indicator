@@ -6,18 +6,41 @@ $ErrorActionPreference = "Stop"
 
 $AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $HookScript = Join-Path $AppDir "codex_status_hook.py"
+$HookLauncher = Join-Path $AppDir "invoke-status-hook.ps1"
 $CodexHome = Join-Path $env:USERPROFILE ".codex"
 $HooksPath = Join-Path $CodexHome "hooks.json"
 $BackupDir = Join-Path $AppDir "backups"
 $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
+$BundledPythonPath = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+$ProjectPythonPath = Join-Path $AppDir "python-runtime-release\python.exe"
+$SystemPythonPath = "C:\Python313\python.exe"
+$PythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+$ConfiguredPythonPath = [Environment]::GetEnvironmentVariable("CODEX_TRAFFIC_LIGHT_PYTHON", "User")
+if ($ConfiguredPythonPath -and (Test-Path -LiteralPath $ConfiguredPythonPath)) {
+  $PythonPath = $ConfiguredPythonPath
+} elseif (Test-Path -LiteralPath $ProjectPythonPath) {
+  $PythonPath = $ProjectPythonPath
+} elseif (Test-Path -LiteralPath $SystemPythonPath) {
+  $PythonPath = $SystemPythonPath
+} elseif (Test-Path -LiteralPath $BundledPythonPath) {
+  $PythonPath = $BundledPythonPath
+} elseif ($PythonCommand) {
+  $PythonPath = $PythonCommand.Source
+} else {
+  $PythonPath = $null
+}
+if (-not (Test-Path -LiteralPath $PythonPath)) {
+  throw "Cannot find Python 3. Install Python or set a usable python.exe on PATH. Checked: $PythonPath"
+}
+
 function New-HookHandler {
   param([string]$EventName)
-  $Command = "python `"$HookScript`" --event $EventName"
+  $Command = "`"$PythonPath`" `"$HookScript`" --event $EventName"
   return [ordered]@{
     type = "command"
     command = $Command
-    commandWindows = $Command
+    commandWindows = "powershell.exe -NoProfile -NonInteractive -File `"$HookLauncher`" -PythonPath `"$PythonPath`" -EventName $EventName"
     timeout = 5
     statusMessage = "Update traffic light indicator"
   }
@@ -112,7 +135,7 @@ if (-not (Test-Path -LiteralPath $BackupDir)) {
 }
 
 if (Test-Path -LiteralPath $HooksPath) {
-  $Raw = Get-Content -LiteralPath $HooksPath -Raw
+  $Raw = Get-Content -LiteralPath $HooksPath -Raw -Encoding UTF8
   $Config = $Raw | ConvertFrom-Json
   $BackupPath = Join-Path $BackupDir "hooks-before-install-$Stamp.json"
 } else {
@@ -133,8 +156,9 @@ if ($DryRun) {
   exit 0
 }
 
-$Raw | Set-Content -LiteralPath $BackupPath -Encoding UTF8
-$OutputJson | Set-Content -LiteralPath $HooksPath -Encoding UTF8
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($BackupPath, $Raw, $Utf8NoBom)
+[System.IO.File]::WriteAllText($HooksPath, $OutputJson, $Utf8NoBom)
 
 Write-Host "Installed traffic-light hooks."
 Write-Host "Hooks file: $HooksPath"

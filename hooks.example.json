@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event SessionStart",
-            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event SessionStart",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -File \"C:\\path\\to\\traffic-light-indicator\\invoke-status-hook.ps1\" -PythonPath \"C:\\path\\to\\python.exe\" -EventName SessionStart",
             "timeout": 5,
             "statusMessage": "Update traffic light indicator"
           }
@@ -20,7 +20,7 @@
           {
             "type": "command",
             "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event UserPromptSubmit",
-            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event UserPromptSubmit",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -File \"C:\\path\\to\\traffic-light-indicator\\invoke-status-hook.ps1\" -PythonPath \"C:\\path\\to\\python.exe\" -EventName UserPromptSubmit",
             "timeout": 5,
             "statusMessage": "Update traffic light indicator"
           }
@@ -34,7 +34,7 @@
           {
             "type": "command",
             "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PreToolUse",
-            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PreToolUse",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -File \"C:\\path\\to\\traffic-light-indicator\\invoke-status-hook.ps1\" -PythonPath \"C:\\path\\to\\python.exe\" -EventName PreToolUse",
             "timeout": 5,
             "statusMessage": "Update traffic light indicator"
           }
@@ -48,7 +48,7 @@
           {
             "type": "command",
             "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PostToolUse",
-            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PostToolUse",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -File \"C:\\path\\to\\traffic-light-indicator\\invoke-status-hook.ps1\" -PythonPath \"C:\\path\\to\\python.exe\" -EventName PostToolUse",
             "timeout": 5,
             "statusMessage": "Update traffic light indicator"
           }
@@ -62,7 +62,7 @@
           {
             "type": "command",
             "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PermissionRequest",
-            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event PermissionRequest",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -File \"C:\\path\\to\\traffic-light-indicator\\invoke-status-hook.ps1\" -PythonPath \"C:\\path\\to\\python.exe\" -EventName PermissionRequest",
             "timeout": 5,
             "statusMessage": "Update traffic light indicator"
           }
@@ -75,7 +75,7 @@
           {
             "type": "command",
             "command": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event Stop",
-            "commandWindows": "python \"C:\\path\\to\\traffic-light-indicator\\codex_status_hook.py\" --event Stop",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -File \"C:\\path\\to\\traffic-light-indicator\\invoke-status-hook.ps1\" -PythonPath \"C:\\path\\to\\python.exe\" -EventName Stop",
             "timeout": 5,
             "statusMessage": "Update traffic light indicator"
           }

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import time
 import datetime as dt
@@ -215,6 +216,70 @@ def test_token_count_is_not_active(tmp: Path) -> None:
     assert_equal(watcher.refresh()["status"], "red", "token_count should not turn the light green")
 
 
+def test_hook_session_id_discovers_old_rollout() -> None:
+    with tempfile.TemporaryDirectory(prefix="traffic-light-hint-") as tmp_dir:
+        sessions = Path(tmp_dir) / "sessions"
+        parent_id = "00000000-0000-0000-0000-000000000001"
+        parent = sessions / "2026" / "06" / "07" / f"rollout-parent-{parent_id}.jsonl"
+        write_line(parent, session_meta_item(parent_id))
+        write_line(parent, rollout_item({"type": "task_started"}, event_type="event_msg"))
+        old_time = time.time() - 48 * 60 * 60
+        os.utime(parent, (old_time, old_time))
+
+        # More recent completed files occupy every normal watched slot.
+        for index in range(26):
+            path = sessions / "2026" / "06" / "07" / f"rollout-done-{index:02d}.jsonl"
+            write_line(path, rollout_item({"type": "task_complete"}, event_type="event_msg"))
+
+        child = sessions / "2026" / "06" / "07" / "rollout-child.jsonl"
+        write_line(child, session_meta_item("child-id", parent_thread_id=parent_id))
+        write_line(child, rollout_item({"type": "reasoning"}))
+        watcher = CodexRolloutStatus(sessions)
+        snapshot = watcher.refresh()
+        assert_equal(snapshot["active_count"], 0, "old parent should be missed without hint")
+        assert_equal(parent in watcher.watched_paths, False, "old parent should be outside normal scan")
+
+        watcher.last_scan_ts = 0
+        snapshot = watcher.refresh(session_ids=[parent_id])
+        assert_equal(parent in watcher.watched_paths, True, "hint should include old parent")
+        assert_equal(snapshot["active_count"], 1, "old parent should count as active")
+        assert_equal(snapshot["status"], "green", "old parent should keep activity running")
+        assert_equal(snapshot["subagent_active_count"], 1, "active child should be tracked separately")
+
+        write_line(child, rollout_item({"type": "task_complete"}, event_type="event_msg"))
+        snapshot = watcher.refresh(session_ids=[parent_id])
+        assert_equal(snapshot["active_count"], 1, "child completion should not clear active parent")
+        assert_equal(snapshot["subagent_active_count"], 0, "completed child should not be active")
+
+        write_line(parent, rollout_item({"type": "task_complete"}, event_type="event_msg"))
+        os.utime(parent, (old_time, old_time))
+        snapshot = watcher.refresh(session_ids=[parent_id])
+        assert_equal(snapshot["active_count"], 0, "rollout completion should override running hook hint")
+        assert_equal(snapshot["status"], "red", "completed parent should be idle")
+
+
+def test_indicator_passes_hook_session_ids_to_rollout() -> None:
+    class RolloutProbe:
+        def __init__(self) -> None:
+            self.session_ids = None
+
+        def refresh(self, session_ids=None) -> dict:
+            self.session_ids = session_ids
+            return {"status": "green", "source": "rollout", "active_count": 1}
+
+    probe = object.__new__(TrafficLightIndicator)
+    probe.rollout_status = RolloutProbe()
+    probe.read_hook_snapshot = lambda: {
+        "status": "green", "source": "hook", "session_ids": ["parent-id"]
+    }
+    probe.choose_status = lambda hook, rollout: rollout
+    probe.apply_stability = lambda snapshot: snapshot
+    probe.write_diagnostics = lambda *args: None
+    snapshot = probe.read_status_snapshot()
+    assert_equal(probe.rollout_status.session_ids, ["parent-id"], "indicator should pass hook IDs")
+    assert_equal(snapshot["source"], "rollout", "rollout should still decide running state")
+
+
 def test_hook_yellow_priority() -> None:
     state = update_state("PermissionRequest", {"session_id": "test-hook"}, None)
     assert_equal(state["status"], "yellow", "permission request should be yellow")
@@ -355,6 +420,8 @@ def main() -> int:
         test_rollout_final_event_msg_clears_green(tmp)
         test_ignored_event_does_not_refresh_stale_green(tmp)
         test_token_count_is_not_active(tmp)
+    test_hook_session_id_discovers_old_rollout()
+    test_indicator_passes_hook_session_ids_to_rollout()
     test_hook_yellow_priority()
     test_green_hold()
     test_hook_only_overrides_rollout_for_fresh_yellow()
